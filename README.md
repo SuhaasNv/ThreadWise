@@ -5,23 +5,53 @@ Automated engineering workflow for completion products in the Oil & Gas industry
 ## 🚀 Overview
 ThreadWise automates the manual process of extracting vendor connection data (VAM, Hydril), performing body calculations, and auto-filling engineering release templates in Excel.
 
+## 📂 Project Structure
+
+```text
+threadwise/
+├── src/                # Core implementation
+│   ├── extraction/     # Extracts specs from Excel
+│   ├── vendor/         # Vendor-specific Playwright scripts
+│   ├── normalization/  # Mappings and Pydantic schemas 
+│   ├── logic/          # Engineering formulas & MIN logic
+│   ├── excel/          # Excel reading/writing logic
+│   ├── logging/        # Traceability and audit logs
+│   └── main.py         # Entry point (CLI)
+├── tests/              # Unit & Integration tests
+├── data/               # Excel templates & outputs (ignored in git)
+├── scripts/            # Helper bash/python scripts
+├── docs/               # PRD, Implementation Plan, Research
+├── .env                # Secrets (e.g., vendor credentials if applicable)
+├── .gitignore          # Git ignores (avoids committing data/logs)
+├── requirements.txt    # Python dependencies
+└── README.md
+```
+
 ## 🛠 Tech Stack
 - **Language:** Python 3.10+
 - **Web Automation:** Playwright
 - **Excel Handling:** openpyxl / pandas
 - **Validation:** Pydantic
 
-## 📂 Project Structure
-- `src/`: Core logic and scrapers.
-- `docs/`: PRD and technical documentation.
-- `data/`: Excel templates and temporary storage.
-- `tests/`: Unit and integration tests.
-- `logs/`: Traceability logs from execution runs.
-
 ## 🏁 Getting Started
-1. Install dependencies: `pip install -r requirements.txt`
-2. Install Playwright browsers: `playwright install chromium`
-3. Run the orchestrator: `python src/orchestrator.py --input data/template.xlsx`
+
+1. Create a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Install Playwright browsers:
+   ```bash
+   playwright install chromium
+   ```
+4. Run the orchestrator:
+   ```bash
+   python src/main.py --input data/template.xlsx
+   ```
 
 ## 📄 Documentation
 For detailed project documentation, see the following:
