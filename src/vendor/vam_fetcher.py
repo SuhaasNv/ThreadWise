@@ -9,10 +9,11 @@ logger = logging.getLogger(__name__)
 # Constants for resilience
 MAX_RETRIES = 3
 RETRY_DELAY_SEC = 2
-DEFAULT_ACTION_TIMEOUT_MS = 10000  # 10s timeout prevents hanging
+DEFAULT_ACTION_TIMEOUT_MS = 20000  # Increased to 20s for Angular SPA loads
+MOCK_MODE = False  # Turned OFF to hit the real VAM Configurator
 
-# Placeholder vendor URL
-VAM_URL = "https://example.com/vam-portal"
+# Actual Vendor Portal URL
+VAM_URL = "https://www.vamservices.com/product/configurator"
 
 def _clean_value(val_str: str) -> float:
     """
@@ -44,60 +45,86 @@ def fetch_vam_data(connection: str, size: str) -> Dict[str, float]:
     Raises:
         RuntimeError: If all retry attempts to fetch data fail (Hard Stop).
     """
+    if MOCK_MODE:
+        logger.info(f"MOCK_MODE ENABLED: Simulating fetch for {connection} - {size}")
+        time.sleep(1.5)  # Simulate network latency
+        return {
+            "tension": 345000.0 if "BOX" in connection.upper() else 330000.0,
+            "burst": 12000.0 if "BOX" in connection.upper() else 12500.0,
+            "collapse": 11500.0 if "BOX" in connection.upper() else 11000.0
+        }
+
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info(f"[Attempt {attempt}/{MAX_RETRIES}] Fetching VAM data for {connection} - {size}")
             
             with sync_playwright() as p:
                 # Launch browser. headless=True for production speed.
-                # headless=False is useful for local debugging to see the SPA load.
                 browser = p.chromium.launch(headless=True)
                 context = browser.new_context()
                 page = context.new_page()
-
-                # Set a strict timeout to avoid infinite hangs on broken vendor sites
                 page.set_default_timeout(DEFAULT_ACTION_TIMEOUT_MS)
 
-                # Step 1: Navigate to the vendor entry page
-                page.goto(VAM_URL)
+                # Step 1: Navigate to the real VAM Angular Configurator
+                page.goto(VAM_URL, wait_until="domcontentloaded")
+                
+                # Format specific vendor sizes (e.g. 3.50 to '3-1/2' or generic matching)
+                formatted_size = str(size).replace(".5", "-1/2").replace(".50", "-1/2")
+                if not "-" in formatted_size and not "." in formatted_size:
+                    formatted_size += " in."
                 
                 # ------------------------------------------------------------------
-                # MVP NOTE: The selectors below are explicitly robust placeholders.
-                # Replace these with the actual ID, data-testid, or semantic HTML 
-                # identifiers used on the real VAM website to prevent brittle scraping.
+                # Authentic Playwright Navigation Steps for VAMServices.com
                 # ------------------------------------------------------------------
-                connection_selector = "select#connection_dropdown"
-                size_selector = "select#size_dropdown"
-                submit_btn_selector = "button#submit_btn"
                 
-                # Step 2: Handle dropdown interactions
-                # Wait for the first element to ensure the SPA is hydrated and ready
-                page.wait_for_selector(connection_selector, state="visible")
-                page.select_option(connection_selector, label=connection)
+                # Format specific connection names to match Vendor standard
+                # Excel typically appends ' BOX' or ' PIN', but VAM just wants the base connection
+                clean_connection = connection.upper().replace(" BOX", "").replace(" PIN", "").strip()
                 
-                # Often, size dropdowns are populated dynamically after connection selection.
-                # We wait for it to be visible/enabled before interacting.
-                page.wait_for_selector(size_selector, state="visible")
-                page.select_option(size_selector, label=size)
+                # Wait for the Connection search box to hydrate
+                search_input = "input.connection-search-input"
+                page.wait_for_selector(search_input, state="visible")
+                page.fill(search_input, clean_connection)
+                
+                # Click the matching div in the populated dropdown
+                page.click(f"//div[contains(text(), '{clean_connection}')]")
+                
+                # Navigate to the OD (Size) dropdown
+                od_input = "input[placeholder='select OD']"
+                page.wait_for_selector(od_input, state="visible")
+                page.fill(od_input, formatted_size)
+                
+                # Click the first matching result in the OD dropdown
+                page.click(f"//mat-option//span[contains(text(), '{formatted_size}')]")
+                
+                # Click the View CDS (Connection Data Sheet) button to load results
+                page.click("//button[span[contains(text(), 'View CDS')]]")
 
-                # Step 3: Submit and wait for results
-                page.click(submit_btn_selector)
-                
-                # Wait for the results container to render in the DOM
-                results_table = "table#results_table"
-                page.wait_for_selector(results_table, state="visible")
+                # Move into the formal Connection Data view header
+                page.click("//a[contains(text(), 'Connection Data')]")
 
-                # Step 4: Extract data 
-                # .inner_text() fetches the exact textual value a user sees.
-                tension_raw = page.locator("td[data-field='tensile_strength']").inner_text()
-                burst_raw = page.locator("td[data-field='internal_yield']").inner_text()
-                collapse_raw = page.locator("td[data-field='collapse_resistance']").inner_text()
+                # Step 4: Extract data from the Joint Performances cards
+                # Wait safely for the specific Angular card values to populate
+                page.wait_for_selector("xpath=//div[div[span[contains(text(), 'Tension Strength, with Sealability')]]]", state="visible")
+
+                # Extract Tension (Tensile Strength) By Label
+                tension_raw = page.locator("xpath=//div[div[span[contains(text(), 'Tension Strength, with Sealability')]]]//span[contains(@class, 'ng-star-inserted')]").inner_text()
+                
+                # Extract Burst (Internal Pressure Resistance) By Label
+                burst_raw = page.locator("xpath=//div[div[span[contains(text(), 'Internal Pressure Resistance')]]]//span[contains(@class, 'ng-star-inserted')]").inner_text()
+                
+                # Extract Collapse (External Pressure Resistance) By Label
+                collapse_raw = page.locator("xpath=//div[div[span[contains(text(), 'External Pressure Resistance')]]]//span[contains(@class, 'ng-star-inserted')]").inner_text()
 
                 browser.close()
 
-                # Step 5: Normalize and return the schema
+                # Cleanup strings (e.g., '160 klb' -> 160000.0)
+                tension_val = _clean_value(tension_raw)
+                if "klb" in tension_raw.lower():
+                    tension_val *= 1000.0
+                    
                 return {
-                    "tension": _clean_value(tension_raw),
+                    "tension": tension_val,
                     "burst": _clean_value(burst_raw),
                     "collapse": _clean_value(collapse_raw)
                 }
