@@ -2,6 +2,10 @@
 
 Automated engineering workflow for completion products in the Oil & Gas industry.
 
+## Project status
+
+This repo is an **experiment** and a **minimal MVP**—a learning and portfolio sketch, not a finished or supported product. It is **not** production-ready engineering software: no warranty of correctness, completeness, or ongoing maintenance. Treat outputs as illustrative only unless you validate them yourself under your own processes.
+
 ## 🚀 Overview
 ThreadWise automates the manual process of extracting vendor connection data (VAM, Hydril), performing body calculations, and auto-filling engineering release templates in Excel.
 
